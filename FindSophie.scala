@@ -61,7 +61,7 @@ class Room(val locations: List[Location], connections: List[Connection]) {
 }
 
 /**
- * A location that Sophie can be found, i.e. a vertex.
+ * A location where Sophie can be found, i.e. a vertex.
  */
 class Location(id: String, val probability: Double) {
   override def toString = id + ":" + probability
