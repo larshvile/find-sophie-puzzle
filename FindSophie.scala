@@ -1,4 +1,5 @@
 // http://www.facebook.com/careers/puzzles.php?puzzle_id=11
+import scala.collection.mutable.ListBuffer
 
 object FindSophie {
 
@@ -9,58 +10,54 @@ object FindSophie {
     System.err.println("> completed in " + (System.currentTimeMillis - started) + "ms")
   }
 
-  // TODO watch out for locations with 0 probability, no need to consider them required...
   private def calculateExpectedTime(room: Room): Double = {
-    var path = new Path(room.start)
+    val shortestPath = room.wander()
+      .sortWith(fastestPath)
+      .head
 
-    while (path.locations.distinct.size < room.locations.size) {
-      val remainingLocations = room.locations.filterNot(path.locations.contains(_))
-      val possiblePaths = remainingLocations.flatMap(room.findPathsTo(path, _))
+    // TODO make sure that all required locations have been found
+    // TODO watch out for locations with prob 0
+//      return -1  impossible to find Sophie, disconnected vertcies..
 
-      if (possiblePaths.isEmpty) {
-        return -1 // Sophie can't be found, i.e. missing some edges
-      }
-
-      // let's go with the least costly path to one of the remaining locations
-      path = possiblePaths
-        .sortWith(_.cost < _.cost)
-        .head
-    }
-
-    System.err.println("going for " + path)
-
-    path.expectedTime
+    println("going for '" + shortestPath + "'")
+    shortestPath.expectedTime
   }
+
+  private def fastestPath(o1: Path, o2: Path) = o1.expectedTime < o2.expectedTime
 }
 
 /**
  * A room containing the locations & connections, i.e. a graph.
  */
 class Room(val locations: List[Location], connections: List[Connection]) {
-  val start = locations.head
 
-  def findPathsTo(path: Path, to: Location): List[Path] = {
-    traverse(path, to, List(path.head))
+  /**
+   * Wanders randomly through the room, returing each unique, acyclic path that contains each location.
+   */
+  def wander(): List[Path] = {
+    traverse(new Path(locations.head))
   }
 
-  private def traverse(path: Path, to: Location, visited: List[Location]): List[Path] = {
-    var result: List[Path] = List() // TODO collect stuff from the map instead?
+  /*
+   * Finding Sophie, the brute force way =)
+   */
+  private def traverse(p: Path): List[Path] = {
+    if (hasCycle(p)) return Nil
+    if (eachLocationsVisited(p)) return List(p)
+    connections
+      .filter(_.contains(p.head))
+      .flatMap(c => traverse(new Path(c.other(p.head), c.time, p)))
+  }
 
-    for (c <- connections.filter(_.contains(path.head))) {
-      if (c.other(path.head) == to) {
-        result = result ::: List(new Path(to, c.time, path))
-      } else {
-        val next = c.other(path.head)
-        // TODO if the algorithm is improved, this should be replaced with a cycle-check
-        if (!visited.contains(next)) { // don't backtrack on edges visited this traversal
-          result = result ::: traverse(new Path(next, c.time, path),
-            to,
-            visited ::: List(next))
-        }
-      }
+  private def eachLocationsVisited(p: Path) = p.locations.distinct.size == locations.size
+
+  private def hasCycle(p: Path): Boolean = {
+    var prev: Location = null
+    p.locations.dropRight(2).foreach { l =>
+      if (p.head == l && p.tail.head == prev) return true
+      prev = l
     }
-
-    result
+    false
   }
 }
 
@@ -84,13 +81,9 @@ class Connection(val from: Location, val to: Location, val time: Double) {
  */
 class Path(val head: Location, val time: Double, val tail: Path) {
   def this(head: Location) = this(head, 0, null)
-  def contains(l: Location): Boolean = head == l || (tail != null && tail.contains(l))
   def locations: List[Location] = (if (tail == null) List() else tail.locations) ::: List(head)
 
-  /**
-   * The cost, defined as time vs probability, of walking the path.
-   */
-  val cost: Double = (1. - head.probability) * time + (if (tail == null) 0 else tail.cost)
+  private def contains(l: Location): Boolean = head == l || (tail != null && tail.contains(l))
 
   /**
    * True if this is the first time 'head' is encountered. This is important because when we visit a location
@@ -136,8 +129,23 @@ class Path(val head: Location, val time: Double, val tail: Path) {
 import scala.collection.mutable.LinkedHashMap
 object RoomLoader {
   def load(): Room = {
-  
-    // TODO added a booby-trap to the graph, this case should probably be defined in a dedicated data-file..
+
+  val l = new LinkedHashMap[String, Location]()
+    l += "front_door" -> new Location("front_door",       .2)
+    l += "in_cabinet" -> new Location("in_cabinet",       .3)
+    l += "under_bed" -> new Location("under_bed",         .4)
+    l += "behind_blinds" -> new Location("behind_blinds", .1)
+
+  val c = List(
+    new Connection(l.get("front_door").orNull, l.get("under_bed").orNull,     5.),
+    new Connection(l.get("under_bed").orNull, l.get("behind_blinds").orNull,  9.),
+    new Connection(l.get("front_door").orNull, l.get("behind_blinds").orNull, 5.),
+    new Connection(l.get("front_door").orNull, l.get("in_cabinet").orNull,    2.),
+    new Connection(l.get("in_cabinet").orNull, l.get("behind_blinds").orNull, 6.)
+    )
+
+  /*  // booby trapped version of the graph above, front -> under seems like the best route when considering
+      // only one hop at a time..
     val l = new LinkedHashMap[String, Location]()
     l += "front_door" -> new Location("front_door",       .2)
     l += "in_cabinet" -> new Location("in_cabinet",       .1)
@@ -150,7 +158,7 @@ object RoomLoader {
 //      new Connection(l.get("front_door").orNull, l.get("behind_blinds").orNull, 5.),
       new Connection(l.get("front_door").orNull, l.get("in_cabinet").orNull,      2.),
       new Connection(l.get("in_cabinet").orNull, l.get("behind_blinds").orNull,   1.)
-      )
+      )*/
 
     new Room(l.values.toList, c)
   }
