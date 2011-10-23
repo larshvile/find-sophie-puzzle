@@ -19,7 +19,7 @@ object FindSophie {
     // TODO watch out for locations with prob 0
 //      return -1  impossible to find Sophie, disconnected vertcies..
 
-    println("going for '" + shortestPath + "'")
+    System.err.println("going for '" + shortestPath + "'")
     shortestPath.expectedTime
   }
 
@@ -32,7 +32,8 @@ object FindSophie {
 class Room(val locations: List[Location], connections: List[Connection]) {
 
   /**
-   * Wanders randomly through the room, returing each unique, acyclic path that contains each location.
+   * Wanders randomly through the room, returing each unique, acyclic path that contains each connected
+   * location.
    */
   def wander(): List[Path] = {
     traverse(new Path(locations.head))
