@@ -1,32 +1,36 @@
 // http://www.facebook.com/careers/puzzles.php?puzzle_id=11
 
-object FindSophie extends scala.App {
-  val started = System.currentTimeMillis
+object FindSophie {
 
-  val room = RoomLoader.load()
-  var path = new Path(room.start)
-
-  // TODO This algorithm may not be able to find _the_ best route in a general graph, since it does one
-  // hop at a time. In a graph with fewer edges there may be some booby traps, vertices that have low cost,
-  // but ultimately leads to a greater cost because we have to backtrack or something..
-  while (path.locations.distinct.size < room.locations.size) {
-    val remainingLocations = room.locations.filterNot(path.locations.contains(_)) // TODO what about locations with 0 probability??
-    val possiblePaths = remainingLocations.flatMap(room.findPathsTo(path, _))
-
-    if (possiblePaths.isEmpty) {
-      println("-1.00") // TODO cleanup, the traversal stuff should be a method that returns the expected-time as a double, nothing else..
-      System.exit(0)
-    }
-
-    // let's go with the least costly path to one of the remaining locations
-    path = possiblePaths
-      .sortWith(_.cost < _.cost)
-      .head
+  def main (args: Array[String]): Unit = {
+    val started = System.currentTimeMillis
+    val expectedTime = calculateExpectedTime(RoomLoader.load())
+    println("%3.2f".format(expectedTime))
+    System.err.println("> completed in " + (System.currentTimeMillis - started) + "ms")
   }
 
-  println("going for " + path)
-  println("expected time: " + "%3.2f".format(path.expectedTime))
-  println("completed in " + (System.currentTimeMillis - started) + "ms")
+  // TODO watch out for locations with 0 probability, no need to consider them required...
+  private def calculateExpectedTime(room: Room): Double = {
+    var path = new Path(room.start)
+
+    while (path.locations.distinct.size < room.locations.size) {
+      val remainingLocations = room.locations.filterNot(path.locations.contains(_))
+      val possiblePaths = remainingLocations.flatMap(room.findPathsTo(path, _))
+
+      if (possiblePaths.isEmpty) {
+        return -1 // Sophie can't be found, i.e. missing some edges
+      }
+
+      // let's go with the least costly path to one of the remaining locations
+      path = possiblePaths
+        .sortWith(_.cost < _.cost)
+        .head
+    }
+
+    System.err.println("going for " + path)
+
+    path.expectedTime
+  }
 }
 
 /**
@@ -40,7 +44,7 @@ class Room(val locations: List[Location], connections: List[Connection]) {
   }
 
   private def traverse(path: Path, to: Location, visited: List[Location]): List[Path] = {
-    var result: List[Path] = List()
+    var result: List[Path] = List() // TODO collect stuff from the map instead?
 
     for (c <- connections.filter(_.contains(path.head))) {
       if (c.other(path.head) == to) {
@@ -132,18 +136,20 @@ class Path(val head: Location, val time: Double, val tail: Path) {
 import scala.collection.mutable.LinkedHashMap
 object RoomLoader {
   def load(): Room = {
+  
+    // TODO added a booby-trap to the graph, this case should probably be defined in a dedicated data-file..
     val l = new LinkedHashMap[String, Location]()
-    l += "front_door" -> new Location("front_door", .2)
-    l += "in_cabinet" -> new Location("in_cabinet", .3)
-    l += "under_bed" -> new Location("under_bed", .4)
-    l += "behind_blinds" -> new Location("behind_blinds", .1)
+    l += "front_door" -> new Location("front_door",       .2)
+    l += "in_cabinet" -> new Location("in_cabinet",       .1)
+    l += "under_bed" -> new Location("under_bed",         .15)
+    l += "behind_blinds" -> new Location("behind_blinds", .55)
 
     val c = List(
-      new Connection(l.get("front_door").orNull, l.get("under_bed").orNull, 5.),
-      new Connection(l.get("under_bed").orNull, l.get("behind_blinds").orNull, 9.),
-      new Connection(l.get("front_door").orNull, l.get("behind_blinds").orNull, 5.),
-      new Connection(l.get("front_door").orNull, l.get("in_cabinet").orNull, 2.),
-      new Connection(l.get("in_cabinet").orNull, l.get("behind_blinds").orNull, 6.)
+      new Connection(l.get("front_door").orNull, l.get("under_bed").orNull,       2.),
+//      new Connection(l.get("under_bed").orNull, l.get("behind_blinds").orNull,  9.),
+//      new Connection(l.get("front_door").orNull, l.get("behind_blinds").orNull, 5.),
+      new Connection(l.get("front_door").orNull, l.get("in_cabinet").orNull,      2.),
+      new Connection(l.get("in_cabinet").orNull, l.get("behind_blinds").orNull,   1.)
       )
 
     new Room(l.values.toList, c)
