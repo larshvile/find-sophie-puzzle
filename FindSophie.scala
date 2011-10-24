@@ -10,17 +10,19 @@ object FindSophie {
     System.err.println("> completed in " + (System.currentTimeMillis - started) + "ms")
   }
 
+  /**
+   * Returns the expected time to find Sophie on the optimal path through the room.
+   */
   private def calculateExpectedTime(room: Room): Double = {
-    val shortestPath = room.wander()
+    val paths = room.findEachPath() // TODO switch algorithm based on the number of connections
       .sortWith(fastestPath)
-      .head
 
-    // TODO make sure that all required locations have been found
-    // TODO watch out for locations with prob 0
-//      return -1  impossible to find Sophie, disconnected vertcies..
+    if (paths.isEmpty) {
+      return -1
+    }
 
-    System.err.println("going for '" + shortestPath + "'")
-    shortestPath.expectedTime
+    System.err.println("going for '" + paths.head + "'")
+    paths.head.expectedTime
   }
 
   private def fastestPath(o1: Path, o2: Path) = o1.expectedTime < o2.expectedTime
@@ -30,27 +32,25 @@ object FindSophie {
  * A room containing the locations & connections, i.e. a graph.
  */
 class Room(val locations: List[Location], connections: List[Connection]) {
+  val requiredLocations = locations.filter(_.probability > 0)
 
   /**
-   * Wanders randomly through the room, returing each unique, acyclic path that contains each connected
-   * location.
+   * Finds each path through the room using brute force. This has a time complexity of O(n!) so it's basically
+   * useless =)
    */
-  def wander(): List[Path] = {
-    traverse(new Path(locations.head))
+  def findEachPath(): List[Path] = {
+    bruteForceTraverse(new Path(locations.head))
   }
 
-  /*
-   * Finding Sophie, the brute force way =)
-   */
-  private def traverse(p: Path): List[Path] = {
+  private def bruteForceTraverse(p: Path): List[Path] = {
     if (hasCycle(p)) return Nil
-    if (eachLocationsVisited(p)) return List(p)
+    if (eachRequiredLocationVisited(p)) return List(p)
     connections
       .filter(_.contains(p.head))
-      .flatMap(c => traverse(new Path(c.other(p.head), c.time, p)))
+      .flatMap(c => bruteForceTraverse(new Path(c.other(p.head), c.time, p)))
   }
 
-  private def eachLocationsVisited(p: Path) = p.locations.distinct.size == locations.size
+  private def eachRequiredLocationVisited(p: Path) = requiredLocations.forall(p.locations.contains(_))
 
   private def hasCycle(p: Path): Boolean = {
     var prev: Location = null
@@ -137,6 +137,9 @@ object RoomLoader {
     l += "under_bed" -> new Location("under_bed",         .4)
     l += "behind_blinds" -> new Location("behind_blinds", .1)
 
+    // Booby trap.. no way to reach the void =) But there's no need to either..
+    l += "void" -> new Location("void", 0)
+
   val c = List(
     new Connection(l.get("front_door").orNull, l.get("under_bed").orNull,     5.),
     new Connection(l.get("under_bed").orNull, l.get("behind_blinds").orNull,  9.),
@@ -145,8 +148,7 @@ object RoomLoader {
     new Connection(l.get("in_cabinet").orNull, l.get("behind_blinds").orNull, 6.)
     )
 
-  /*  // booby trapped version of the graph above, front -> under seems like the best route when considering
-      // only one hop at a time..
+  /*  // booby trapped version of the graph above, front -> under seems like the best route in greedy-mode
     val l = new LinkedHashMap[String, Location]()
     l += "front_door" -> new Location("front_door",       .2)
     l += "in_cabinet" -> new Location("in_cabinet",       .1)
